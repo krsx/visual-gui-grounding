@@ -11,6 +11,7 @@ import numpy as np
 from dotenv import load_dotenv, find_dotenv
 
 from utils import constant, prompt
+from utils import response_model
 
 
 load_dotenv(find_dotenv())
@@ -51,7 +52,7 @@ def generate_mask(image_path, mask_generator):
 
 def save_cropped_images(cropped_images):
     for idx, image in enumerate(cropped_images):
-        path = f"output/segmentation/{idx}.png"
+        path = f"{constant.SEGMENTATION_OUTPUT_PATH}/{idx}.png"
         image.save(path)
         print("Successfully saved cropped image - ", idx)
 
@@ -67,8 +68,6 @@ def cropped_image(image_path, masks):
         except Exception as e:
             print("Error cropping image")
             print("Error: ", e)
-
-    save_cropped_images(cropped_images)
 
     return cropped_images
 
@@ -140,7 +139,7 @@ def init_openai():
 
 def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_OUTPUT_PATH):
     user_input = prompt.format_input(user_goals, prev_actions, captions_path)
-    response = llm.chat.completions.create(
+    response = llm.beta.chat.completions.parse(
         model=constant.OPENAI_MODEL,
         messages=[
             {
@@ -151,7 +150,8 @@ def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_O
                 "role": "user",
                 "content": user_input
             }
-        ]
+        ],
+        response_format=response_model.ThoughtResponse
     )
 
     return response
@@ -163,56 +163,60 @@ PREV_ACTIONS = ""
 
 
 def main():
-    print("Loading SAM models...")
-    try:
-        sam_mask = SamAutomaticMaskGenerator(
-            build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
-        print("SAM models loaded")
-    except:
-        print("SAM models not found")
+    # print("Loading SAM models...")
+    # try:
+    #     sam_mask = SamAutomaticMaskGenerator(
+    #         build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
+    #     print("SAM models loaded")
+    # except:
+    #     print("SAM models not found")
 
-    print("Generating masks...")
-    try:
-        masks = generate_mask(constant.IMAGE_PATH, sam_mask)
-        print("Masks generated")
-    except:
-        print("Error generating masks")
+    # print("Generating masks...")
+    # try:
+    #     masks = generate_mask(constant.IMAGE_PATH, sam_mask)
+    #     print("Masks generated")
+    # except:
+    #     print("Error generating masks")
 
-    print("Cropping images...")
-    crop_time_start = time.time()
-    cropped_image(constant.IMAGE_PATH, masks)
-    crop_time_end = time.time()
+    # print("Cropping images...")
+    # crop_time_start = time.time()
+    # cropped_images = cropped_image(constant.IMAGE_PATH, masks)
+    # save_cropped_images(cropped_images)
+    # crop_time_end = time.time()
 
-    print("Loading captioner models...")
-    try:
-        processor, model = generate_captioner()
-        print("Captioner models loaded")
-    except:
-        print("Error loading captioner models")
+    # print("Loading captioner models...")
+    # try:
+    #     processor, model = generate_captioner()
+    #     print("Captioner models loaded")
+    # except:
+    #     print("Error loading captioner models")
 
-    print("Generating segmentation caption...")
-    caption_time_start = time.time()
-    captions = caption_image(processor, model)
-    caption_time_end = time.time()
+    # print("Generating segmentation caption...")
+    # caption_time_start = time.time()
+    # captions = caption_image(processor, model)
+    # caption_time_end = time.time()
 
-    if captions is not None:
-        print("Segmentation caption generated")
+    # if captions is not None:
+    #     print("Segmentation caption generated")
 
-        print("Saving captions to txt...")
-        save_to_txt(captions, "output/captions/captions.txt")
-
-        print("\nProcess completed!")
-        print("Time taken to crop images: ", crop_time_end - crop_time_start)
-        print("Time taken to generate captions: ",
-              caption_time_end - caption_time_start)
-    else:
-        print("Error generating captions")
+    #     print("Saving captions to txt...")
+    #     save_to_txt(captions, "output/captions/captions.txt")
+    # else:
+    #     print("Error generating captions")
 
     print("Initializing LLM...")
     openai = init_openai()
     print("Thinking...")
+    llm_time_start = time.time()
     result = execute_llm(openai, USER_GOALS, PREV_ACTIONS)
+    llm_time_start = time.time()
     print("Final result:\n", result.choices[0].message.content)
+
+    print("\nProcess completed!")
+    # print("Time taken to crop images: ", crop_time_end - crop_time_start)
+    # print("Time taken to generate captions: ",
+    #       caption_time_end - caption_time_start)
+    print("Time taken to analyze: ", llm_time_start - llm_time_start)
 
 
 if __name__ == "__main__":
