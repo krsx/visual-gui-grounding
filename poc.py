@@ -1,4 +1,3 @@
-import base64
 import os
 import time
 import cv2
@@ -9,6 +8,7 @@ from PIL import Image, ImageDraw
 import torch
 import numpy as np
 from dotenv import load_dotenv, find_dotenv
+import json
 
 from utils import constant, prompt
 from utils import response_model
@@ -157,52 +157,73 @@ def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_O
     return response
 
 
+def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
+    original_image = Image.open(constant.IMAGE_PATH)
+    overlay_image = Image.new('RGBA', original_image.size, (0, 0, 0, 0))
+    overlay_color = (255, 0, 0, 200)
+
+    segmentation_mask_image = Image.fromarray(
+        masks[seg_index]["segmentation"].astype('uint8') * 255)
+    draw = ImageDraw.Draw(overlay_image)
+
+    draw.bitmap((0, 0), segmentation_mask_image, fill=overlay_color)
+
+    x, y = coordinates
+    top_left = (x - dot_size, y - dot_size)
+    bottom_right = (x + dot_size, y + dot_size)
+
+    draw.ellipse([top_left, bottom_right], fill="blue")
+    result_image = Image.alpha_composite(
+        original_image.convert('RGBA'), overlay_image)
+    result_image.show()
+
+
 # FOR TESTING PURPOSES
 USER_GOALS = "I want to buy a new shoes as soon as possible"
 PREV_ACTIONS = ""
 
 
 def main():
-    # print("Loading SAM models...")
-    # try:
-    #     sam_mask = SamAutomaticMaskGenerator(
-    #         build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
-    #     print("SAM models loaded")
-    # except:
-    #     print("SAM models not found")
+    print("Loading SAM models...")
+    try:
+        sam_mask = SamAutomaticMaskGenerator(
+            build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
+        print("SAM models loaded")
+    except:
+        print("SAM models not found")
 
-    # print("Generating masks...")
-    # try:
-    #     masks = generate_mask(constant.IMAGE_PATH, sam_mask)
-    #     print("Masks generated")
-    # except:
-    #     print("Error generating masks")
+    print("Generating masks...")
+    try:
+        masks = generate_mask(constant.IMAGE_PATH, sam_mask)
+        print("Masks generated")
+    except:
+        print("Error generating masks")
 
-    # print("Cropping images...")
-    # crop_time_start = time.time()
-    # cropped_images = cropped_image(constant.IMAGE_PATH, masks)
-    # save_cropped_images(cropped_images)
-    # crop_time_end = time.time()
+    print("Cropping images...")
+    crop_time_start = time.time()
+    cropped_images = cropped_image(constant.IMAGE_PATH, masks)
+    save_cropped_images(cropped_images)
+    crop_time_end = time.time()
 
-    # print("Loading captioner models...")
-    # try:
-    #     processor, model = generate_captioner()
-    #     print("Captioner models loaded")
-    # except:
-    #     print("Error loading captioner models")
+    print("Loading captioner models...")
+    try:
+        processor, model = generate_captioner()
+        print("Captioner models loaded")
+    except:
+        print("Error loading captioner models")
 
-    # print("Generating segmentation caption...")
-    # caption_time_start = time.time()
-    # captions = caption_image(processor, model)
-    # caption_time_end = time.time()
+    print("Generating segmentation caption...")
+    caption_time_start = time.time()
+    captions = caption_image(processor, model)
+    caption_time_end = time.time()
 
-    # if captions is not None:
-    #     print("Segmentation caption generated")
+    if captions is not None:
+        print("Segmentation caption generated")
 
-    #     print("Saving captions to txt...")
-    #     save_to_txt(captions, "output/captions/captions.txt")
-    # else:
-    #     print("Error generating captions")
+        print("Saving captions to txt...")
+        save_to_txt(captions, "output/captions/captions.txt")
+    else:
+        print("Error generating captions")
 
     print("Initializing LLM...")
     openai = init_openai()
@@ -210,12 +231,25 @@ def main():
     llm_time_start = time.time()
     result = execute_llm(openai, USER_GOALS, PREV_ACTIONS)
     llm_time_start = time.time()
-    print("Final result:\n", result.choices[0].message.content)
+    extract_json = json.loads(result.choices[0].message.content)
+    print("\nFinal result:")
+    print("Thought: ", extract_json["thought"])
+    print("Action Type: ", extract_json["action"]["action_type"])
+    print("Content: ", extract_json["action"]["content"])
+    print("Desc: ", extract_json["action"]["option_description"])
+
+    seg_index = extract_json["action"]["option_number"]
+    print("Index: ", seg_index)
+    coordinates = masks[seg_index]["point_coords"][0]
+    print("Coordinates: ", coordinates)
+
+    print("Showing selected segment...")
+    draw_selected_segment(seg_index, masks, coordinates)
 
     print("\nProcess completed!")
-    # print("Time taken to crop images: ", crop_time_end - crop_time_start)
-    # print("Time taken to generate captions: ",
-    #       caption_time_end - caption_time_start)
+    print("Time taken to crop images: ", crop_time_end - crop_time_start)
+    print("Time taken to generate captions: ",
+          caption_time_end - caption_time_start)
     print("Time taken to analyze: ", llm_time_start - llm_time_start)
 
 
