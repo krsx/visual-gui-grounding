@@ -9,6 +9,7 @@ import torch
 import numpy as np
 from dotenv import load_dotenv, find_dotenv
 import json
+from transformers import BitsAndBytesConfig
 
 from utils import constant, prompt
 from utils import response_model
@@ -52,7 +53,7 @@ def generate_mask(image_path, mask_generator):
 
 def save_cropped_images(cropped_images):
     for idx, image in enumerate(cropped_images):
-        path = f"{constant.SEGMENTATION_OUTPUT_PATH}/{idx}.png"
+        path = f"{constant.SEGMENTATION_OUTPUT_PATH}/{idx}.jpeg"
         image.save(path)
         print("Successfully saved cropped image - ", idx)
 
@@ -69,13 +70,21 @@ def cropped_image(image_path, masks):
             print("Error cropping image")
             print("Error: ", e)
 
+    # DEBUG
+    save_to_txt(masks, "output/masks/masks.txt")
+
     return cropped_images
 
 
 def generate_captioner(model_name=constant.BLIP_MODEL):
     processor = AutoProcessor.from_pretrained(model_name)
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16
+    )
     model = Blip2ForConditionalGeneration.from_pretrained(
-        model_name, device_map=check_device(), load_in_8bit=True, torch_dtype=torch.float16)
+        model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
 
     return processor, model
 
@@ -204,6 +213,7 @@ def main():
     cropped_images = cropped_image(constant.IMAGE_PATH, masks)
     save_cropped_images(cropped_images)
     crop_time_end = time.time()
+    crop_time_inference = crop_time_end - crop_time_start
 
     print("Loading captioner models...")
     try:
@@ -216,6 +226,7 @@ def main():
     caption_time_start = time.time()
     captions = caption_image(processor, model)
     caption_time_end = time.time()
+    caption_time_inference = caption_time_end - caption_time_start
 
     if captions is not None:
         print("Segmentation caption generated")
@@ -231,6 +242,7 @@ def main():
     llm_time_start = time.time()
     result = execute_llm(openai, USER_GOALS, PREV_ACTIONS)
     llm_time_start = time.time()
+    llm_time_inference = llm_time_start - llm_time_start
     extract_json = json.loads(result.choices[0].message.content)
     print("\nFinal result:")
     print("Thought: ", extract_json["thought"])
@@ -247,10 +259,10 @@ def main():
     draw_selected_segment(seg_index, masks, coordinates)
 
     print("\nProcess completed!")
-    print("Time taken to crop images: ", crop_time_end - crop_time_start)
-    print("Time taken to generate captions: ",
-          caption_time_end - caption_time_start)
-    print("Time taken to analyze: ", llm_time_start - llm_time_start)
+    print(f"Time taken to crop images: {crop_time_inference:.4f} seconds")
+    print(
+        f"Time taken to generate captions: {caption_time_inference:.4f} seconds")
+    print(f"Time taken to analyze: {llm_time_inference:.8f} seconds")
 
 
 if __name__ == "__main__":
