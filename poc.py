@@ -192,7 +192,7 @@ def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_O
 
 
 def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
-    original_image = Image.open(constant.IMAGE_PATH)
+    original_image = Image.open(IMAGE_PATH)
     overlay_image = Image.new('RGBA', original_image.size, (0, 0, 0, 0))
     overlay_color = (255, 0, 0, 200)
 
@@ -213,6 +213,7 @@ def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
 
 
 # FOR TESTING PURPOSES
+IMAGE_PATH = constant.TEST_IMAGE_PATH
 USER_GOALS = "I want to buy a new shoes as soon as possible"
 PREV_ACTIONS = ""
 
@@ -222,11 +223,11 @@ def main():
     sam_mask = init_sam()
 
     print("Generating masks...")
-    masks = generate_mask(constant.IMAGE_PATH, sam_mask)
+    masks = generate_mask(IMAGE_PATH, sam_mask)
 
     print("Cropping images...")
     crop_time_start = time.time()
-    cropped_images = cropped_image(constant.IMAGE_PATH, masks)
+    cropped_images = cropped_image(IMAGE_PATH, masks)
     save_cropped_images(cropped_images)
     crop_time_end = time.time()
     crop_time_inference = crop_time_end - crop_time_start
