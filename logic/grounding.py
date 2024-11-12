@@ -99,16 +99,21 @@ def cropped_image(image_path, masks):
 
 
 @st.cache_resource
-def generate_captioner(model_name=constant.BLIP_MODEL):
+def generate_captioner(model_name=constant.BLIP_MODEL, is_quantized=True):
     try:
-        processor = AutoProcessor.from_pretrained(model_name)
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16
-        )
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
+        if is_quantized:
+            processor = AutoProcessor.from_pretrained(model_name)
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16
+            )
+            model = Blip2ForConditionalGeneration.from_pretrained(
+                model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
+        else:
+            processor = AutoProcessor.from_pretrained(model_name)
+            model = Blip2ForConditionalGeneration.from_pretrained(
+                model_name, device_map=check_device(), torch_dtype=torch.float16)
 
         print("Captioner models loaded")
         return processor, model
@@ -136,7 +141,7 @@ def caption_image(processor, model, output_folder=constant.SEGMENTATION_OUTPUT_P
             try:
                 inputs = processor(image, return_tensors="pt").to(
                     check_device(), torch.float16)
-                generated_ids = model.generate(**inputs, max_new_tokens=20)
+                generated_ids = model.generate(**inputs)
                 generated_text = processor.batch_decode(
                     generated_ids, skip_special_tokens=True)[0].strip()
 
@@ -243,6 +248,9 @@ def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
 
 def save_temp_image(image):
     try:
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
+
         image.save(constant.TEMP_IMAGE)
         print("Temp analyzed image saved successfully")
     except Exception as e:
