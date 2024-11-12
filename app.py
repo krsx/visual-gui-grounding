@@ -20,6 +20,14 @@ from logic.grounding import (
     reset_segmentation_output
 )
 
+
+st.set_page_config(
+    page_title="LLM Grounding Demo",
+    page_icon="🔍",
+    initial_sidebar_state="expanded",
+)
+
+
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
 
@@ -40,12 +48,12 @@ def show_table_stats(crop_time_inference, caption_time_inference, llm_time_infer
 
 def start_analyze(image_file, user_goal):
     if image_file is not None and user_goal is not None:
+        st.subheader("**Processed Image**")
+        st.image(image_file,
+                 caption="Webpage Screenshot", use_container_width=True)
+
         with st.spinner("Analyzing image..."):
             st.session_state.is_running = True
-
-            st.subheader("**Processed Image**")
-            st.image(image_file,
-                     caption="Webpage Screenshot", use_container_width=True)
 
             print("Reset previous segmentation...")
             reset_segmentation_output()
@@ -64,7 +72,7 @@ def start_analyze(image_file, user_goal):
             crop_time_inference = crop_time_end - crop_time_start
 
             print("Loading captioner models...")
-            processor, model = generate_captioner()
+            processor, model = generate_captioner(is_quantized=False)
 
             print("Generating segmentation caption...")
             caption_time_start = time.time()
@@ -148,7 +156,6 @@ with st.sidebar:
     if analyze_clicked and user_goal and image_file and new_prompt:
         st.session_state.system_prompt = new_prompt if new_prompt else prompt.SYSTEM_PROMPT
         st.success("Prompt updated successfully!")
-
 
 st.title('LLM Grounding Demo')
 st.divider()
