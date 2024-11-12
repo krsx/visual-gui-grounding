@@ -1,6 +1,6 @@
 SYSTEM_PROMPT = """
 
-* User input *
+# User input
 User goals:
 {user goals}
 
@@ -10,7 +10,7 @@ Previous actions:
 Option list:
 {list of options and its description}
 
-* Instructions *
+# Instructions
 Imagine you are robot browsing the web, just like a humans. Now you need to complete a task. You will receive a screenshot of a webpage. Carefully observe and analyze the screenshot. Based on previous actions, and previous selected components/elements, you need to pick which option number based on the given option list that are relevant to accomplish user goals. Keep in mind that the option list are in form of a descriptive caption generated based on components/section/content of the webpage screenshot. Then, choose one of the following actions:
 1. Click a web element. Be descriptive and specific for which web element should be clicked based on the given option list
 2. Type content in a text box/text field/text area based on the given option list
