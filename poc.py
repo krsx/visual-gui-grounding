@@ -11,8 +11,7 @@ from dotenv import load_dotenv, find_dotenv
 import json
 from transformers import BitsAndBytesConfig
 
-from utils import constant, prompt
-from utils import response_model
+from utils import constant, prompt, response_model
 
 
 load_dotenv(find_dotenv())
@@ -21,6 +20,17 @@ load_dotenv(find_dotenv())
 def check_device():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return device
+
+
+def init_sam():
+    try:
+        sam_mask = SamAutomaticMaskGenerator(
+            build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
+        print("SAM models loaded")
+    except Exception as e:
+        print("SAM models not found")
+        print("Error: ", e)
+    return sam_mask
 
 
 def convert_box_xywh_to_xyxy(box):
@@ -45,10 +55,18 @@ def segment_image(image, segmentation_mask):
 
 
 def generate_mask(image_path, mask_generator):
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    masks = mask_generator.generate(image)
-    return masks
+    try:
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        masks = mask_generator.generate(image)
+
+        print("Masks generated")
+        return masks
+    except Exception as e:
+        print("Error generating masks")
+        print("Error: ", e)
+
+    return None
 
 
 def save_cropped_images(cropped_images):
@@ -71,22 +89,29 @@ def cropped_image(image_path, masks):
             print("Error: ", e)
 
     # DEBUG
-    save_to_txt(masks, "output/masks/masks.txt")
+    # save_to_txt(masks, "output/masks/masks.txt")
 
     return cropped_images
 
 
 def generate_captioner(model_name=constant.BLIP_MODEL):
-    processor = AutoProcessor.from_pretrained(model_name)
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16
-    )
-    model = Blip2ForConditionalGeneration.from_pretrained(
-        model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
+    try:
+        processor = AutoProcessor.from_pretrained(model_name)
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16
+        )
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
 
-    return processor, model
+        print("Captioner models loaded")
+        return processor, model
+    except Exception as e:
+        print("Error loading captioner models")
+        print("Error: ", e)
+
+    return None
 
 
 def caption_image(processor, model, output_folder=constant.SEGMENTATION_OUTPUT_PATH):
@@ -194,19 +219,10 @@ PREV_ACTIONS = ""
 
 def main():
     print("Loading SAM models...")
-    try:
-        sam_mask = SamAutomaticMaskGenerator(
-            build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
-        print("SAM models loaded")
-    except:
-        print("SAM models not found")
+    sam_mask = init_sam()
 
     print("Generating masks...")
-    try:
-        masks = generate_mask(constant.IMAGE_PATH, sam_mask)
-        print("Masks generated")
-    except:
-        print("Error generating masks")
+    masks = generate_mask(constant.IMAGE_PATH, sam_mask)
 
     print("Cropping images...")
     crop_time_start = time.time()
@@ -216,11 +232,7 @@ def main():
     crop_time_inference = crop_time_end - crop_time_start
 
     print("Loading captioner models...")
-    try:
-        processor, model = generate_captioner()
-        print("Captioner models loaded")
-    except:
-        print("Error loading captioner models")
+    processor, model = generate_captioner()
 
     print("Generating segmentation caption...")
     caption_time_start = time.time()
