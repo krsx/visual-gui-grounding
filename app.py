@@ -1,11 +1,11 @@
 import json
 import time
-import pandas as pd
 from PIL import Image
 import streamlit as st
 
 from utils import constant, prompt, response_model
 from logic.grounding import (
+    extract_show_segment_info,
     init_sam,
     generate_mask,
     save_cropped_images,
@@ -17,7 +17,8 @@ from logic.grounding import (
     execute_llm,
     draw_selected_segment,
     save_temp_image,
-    reset_segmentation_output
+    reset_segmentation_output,
+    show_table_stats
 )
 
 
@@ -30,20 +31,8 @@ st.set_page_config(
 
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
-
-
-def show_table_stats(crop_time_inference, caption_time_inference, llm_time_inference):
-    timing_data = {
-        "Process": ["Image Segmentation", "Segmented Image Captioning", "LLM Analyze"],
-        "Inference Time (seconds)": [
-            f"{crop_time_inference:.4f}",
-            f"{caption_time_inference:.4f}",
-            f"{llm_time_inference:.8f}"
-        ]
-    }
-
-    timing_df = pd.DataFrame(timing_data)
-    st.table(timing_df)
+if "system_prompt" not in st.session_state:
+    st.session_state.system_prompt = prompt.SYSTEM_PROMPT
 
 
 def start_analyze(image_file, user_goal):
@@ -72,7 +61,7 @@ def start_analyze(image_file, user_goal):
             crop_time_inference = crop_time_end - crop_time_start
 
             print("Loading captioner models...")
-            processor, model = generate_captioner(is_quantized=False)
+            processor, model = generate_captioner(is_quantized=True)
 
             print("Generating segmentation caption...")
             caption_time_start = time.time()
@@ -93,24 +82,15 @@ def start_analyze(image_file, user_goal):
             print("Thinking...")
             llm_time_start = time.time()
             result = execute_llm(openai, user_goal, [])
-            llm_time_start = time.time()
-            llm_time_inference = llm_time_start - llm_time_start
+            llm_time_end = time.time()
+            llm_time_inference = llm_time_end - llm_time_start
             extract_json = json.loads(result.choices[0].message.content)
 
-            print("\nFinal result:")
-            print("Thought: ", extract_json["thought"])
-            print("Action Type: ", extract_json["action"]["action_type"])
-            print("Content: ", extract_json["action"]["content"])
-            print("Desc: ", extract_json["action"]["option_description"])
-
-            seg_index = extract_json["action"]["option_number"]
-            print("Index: ", seg_index)
-            coordinates = masks[seg_index]["point_coords"][0]
-            print("Coordinates: ", coordinates)
-
             print("Showing selected segment...")
-            result_img = draw_selected_segment(seg_index, masks, coordinates)
             st.subheader("**Grounding Result**")
+            seg_index, coordinates = extract_show_segment_info(
+                masks, extract_json)
+            result_img = draw_selected_segment(seg_index, masks, coordinates)
             st.image(result_img, caption="Selected Segment",
                      use_container_width=True)
 
@@ -124,11 +104,7 @@ def start_analyze(image_file, user_goal):
             show_table_stats(crop_time_inference,
                              caption_time_inference, llm_time_inference)
 
-        st.session_state.is_running = False
-
-
-if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = prompt.SYSTEM_PROMPT
+            st.session_state.is_running = False
 
 
 with st.sidebar:
@@ -145,8 +121,6 @@ with st.sidebar:
             st.error("The uploaded file is not a valid image.")
             st.error(f"Error: {e}")
 
-        save_temp_image(image)
-
     with st.expander("**Current Prompt**"):
         st.markdown(prompt.SYSTEM_PROMPT)
     new_prompt = st.text_area(
@@ -157,10 +131,13 @@ with st.sidebar:
         st.session_state.system_prompt = new_prompt if new_prompt else prompt.SYSTEM_PROMPT
         st.success("Prompt updated successfully!")
 
+
 st.title('LLM Grounding Demo')
 st.divider()
 
+
 if analyze_clicked and user_goal and image_file and not st.session_state.is_running:
+    save_temp_image(image)
     start_analyze(image_file, user_goal)
 else:
     st.info("Please input user goals and upload an image to start analyzing!")
