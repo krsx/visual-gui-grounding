@@ -1,4 +1,5 @@
 from PIL import Image
+import pandas as pd
 import streamlit as st
 import os
 import cv2
@@ -195,8 +196,10 @@ def init_openai():
         return None
 
 
-def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_OUTPUT_PATH):
+def execute_llm(llm, user_goals, prev_actions, image_path=constant.TEMP_IMAGE, captions_path=constant.CAPTIONS_OUTPUT_PATH):
     user_input = prompt.format_input(user_goals, prev_actions, captions_path)
+    base64_image = prompt.encode_image(image_path)
+
     try:
         response = llm.beta.chat.completions.parse(
             model=constant.OPENAI_MODEL,
@@ -207,7 +210,19 @@ def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_O
                 },
                 {
                     "role": "user",
-                    "content": user_input
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": user_input,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url":  base64_image
+                            },
+                        },
+                    ]
+                    # "content": user_input
                 }
             ],
             response_format=response_model.ThoughtResponse
@@ -244,6 +259,52 @@ def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
         original_image.convert('RGBA'), overlay_image)
 
     return result_image
+
+
+def show_table_stats(crop_time_inference, caption_time_inference, llm_time_inference):
+    timing_data = {
+        "Process": ["Image Segmentation", "Segmented Image Captioning", "LLM Analyzing Process"],
+        "Inference Time (seconds)": [
+            f"{crop_time_inference:.4f}",
+            f"{caption_time_inference:.4f}",
+            f"{llm_time_inference:.8f}"
+        ]
+    }
+
+    timing_df = pd.DataFrame(timing_data)
+    st.table(timing_df)
+
+
+def extract_show_segment_info(masks, extract_json):
+    thought = extract_json["thought"]
+    action_type = extract_json["action"]["action_type"]
+    content = extract_json["action"]["content"]
+    option_description = extract_json["action"]["option_description"]
+    coordinates = masks[0]["point_coords"][0]
+    seg_index = extract_json["action"]["option_number"]
+
+    data = {
+        "Thought": [thought],
+        "Action Type": [action_type],
+        "Content": [content],
+        "Description": [option_description],
+        "Segmentation Index": [seg_index],
+        "Coordinates": [coordinates]
+    }
+    df = pd.DataFrame(data)
+
+    st.table(df)
+
+    print("\nFinal result:")
+    print("Thought: ", thought)
+    print("Action Type: ", action_type)
+    print("Content: ", content)
+    print("Description: ", option_description)
+
+    print("Index: ", seg_index)
+    print("Coordinates: ", coordinates)
+
+    return seg_index, coordinates
 
 
 def save_temp_image(image):

@@ -1,3 +1,6 @@
+import base64
+
+
 SYSTEM_PROMPT = """
 
 # User input
@@ -53,3 +56,12 @@ Option list:
     """
 
     return prompt_input
+
+
+def encode_image(image_path):
+    mime_type = "jpeg" if image_path.lower().endswith(
+        ".jpg") or image_path.lower().endswith(".jpeg") else "png"
+    with open(image_path, "rb") as image_file:
+        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+
+    return f"data:image/{mime_type};base64,{base64_image}"
