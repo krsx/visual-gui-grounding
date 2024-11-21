@@ -1,4 +1,5 @@
 import os
+import shutil
 import time
 import cv2
 from openai import OpenAI
@@ -25,12 +26,29 @@ def check_device():
 def init_sam():
     try:
         sam_mask = SamAutomaticMaskGenerator(
-            build_sam(checkpoint=constant.SAM_MODEL).to(check_device()))
+            model=build_sam(checkpoint=constant.SAM_MODEL).to(check_device()),
+            points_per_side=32,               # Reduce sampling points
+            # min_mask_region_area=500,         # Minimum mask area in pixels
+            pred_iou_thresh=0.92,              # Filter masks with lower IoU
+            stability_score_thresh=0.95,      # Keep only stable masks
+            box_nms_thresh=0.7,               # Non-maximum suppression threshold
+        )
         print("SAM models loaded")
     except Exception as e:
         print("SAM models not found")
         print("Error: ", e)
     return sam_mask
+
+
+def convert_gray_image(image_path):
+    try:
+        image = cv2.imread(image_path)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite(constant.GRAY_IMAGE_PATH, gray_image)
+        print("Convert to image saved successfully")
+    except Exception as e:
+        print("Error converting image to grayscale")
+        print("Error: ", e)
 
 
 def convert_box_xywh_to_xyxy(box):
@@ -126,9 +144,10 @@ def caption_image(processor, model, output_folder=constant.SEGMENTATION_OUTPUT_P
             image = Image.open(image_path)
 
             try:
-                inputs = processor(image, return_tensors="pt").to(
-                    check_device(), torch.float16)
-                generated_ids = model.generate(**inputs, max_new_tokens=20)
+                inputs = processor(image, return_tensors="pt",
+                                   prompt="Question: how many cats are there? Answer:").to(
+                    check_device(), torch.float32)
+                generated_ids = model.generate(**inputs, max_new_tokens=10)
                 generated_text = processor.batch_decode(
                     generated_ids, skip_special_tokens=True)[0].strip()
 
@@ -171,28 +190,48 @@ def init_openai():
         return None
 
 
-def execute_llm(llm, user_goals, prev_actions, captions_path=constant.CAPTIONS_OUTPUT_PATH):
+def execute_llm(llm, user_goals, prev_actions, image_path=constant.TEST_IMAGE_PATH, captions_path=constant.CAPTIONS_OUTPUT_PATH):
     user_input = prompt.format_input(user_goals, prev_actions, captions_path)
-    response = llm.beta.chat.completions.parse(
-        model=constant.OPENAI_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": prompt.SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": user_input
-            }
-        ],
-        response_format=response_model.ThoughtResponse
-    )
+    base64_image = prompt.encode_image(image_path)
 
-    return response
+    try:
+        response = llm.beta.chat.completions.parse(
+            model=constant.OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": prompt.SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": user_input,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url":  base64_image
+                            },
+                        },
+                    ]
+                    # "content": user_input
+                }
+            ],
+            response_format=response_model.ThoughtResponse
+        )
+
+        return response
+    except Exception as e:
+        print("Error executing LLM")
+        print("Error: ", e)
+
+    return None
 
 
 def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
-    original_image = Image.open(IMAGE_PATH)
+    original_image = Image.open(constant.TEST_IMAGE_PATH)
     overlay_image = Image.new('RGBA', original_image.size, (0, 0, 0, 0))
     overlay_color = (255, 0, 0, 200)
 
@@ -212,16 +251,42 @@ def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
     result_image.show()
 
 
+def reset_segmentation_output():
+    try:
+        shutil.rmtree(constant.SEGMENTATION_OUTPUT_PATH)
+        os.mkdir(constant.SEGMENTATION_OUTPUT_PATH)
+        print("Segmentation output folder reset")
+    except Exception as e:
+        print("Error resetting segmentation output folder")
+        print("Error: ", e)
+
+
+def extract_segmentation_info(masks, extract_json):
+    print("\nFinal result:")
+    print("Thought: ", extract_json["thought"])
+    print("Action Type: ", extract_json["action"]["action_type"])
+    print("Content: ", extract_json["action"]["content"])
+    print("Desc: ", extract_json["action"]["option_description"])
+
+    seg_index = extract_json["action"]["option_number"]
+    print("Index: ", seg_index)
+    coordinates = masks[seg_index]["point_coords"][0]
+    print("Coordinates: ", coordinates)
+
+    return seg_index, coordinates
+
+
 # FOR TESTING PURPOSES
-IMAGE_PATH = constant.TEST_IMAGE_PATH
-USER_GOALS = "I want to buy a new shoes as soon as possible"
+convert_gray_image(constant.TEST_IMAGE_PATH)
+IMAGE_PATH = constant.GRAY_IMAGE_PATH
+USER_GOALS = "Create a new project"
 PREV_ACTIONS = ""
 
 
 def main():
     print("Loading SAM models...")
+    reset_segmentation_output()
     sam_mask = init_sam()
-
     print("Generating masks...")
     masks = generate_mask(IMAGE_PATH, sam_mask)
 
@@ -234,7 +299,6 @@ def main():
 
     print("Loading captioner models...")
     processor, model = generate_captioner()
-
     print("Generating segmentation caption...")
     caption_time_start = time.time()
     captions = caption_image(processor, model)
@@ -253,29 +317,20 @@ def main():
     openai = init_openai()
     print("Thinking...")
     llm_time_start = time.time()
-    result = execute_llm(openai, USER_GOALS, PREV_ACTIONS)
-    llm_time_start = time.time()
-    llm_time_inference = llm_time_start - llm_time_start
+    result = execute_llm(openai, USER_GOALS, PREV_ACTIONS, )
+    llm_time_end = time.time()
+    llm_time_inference = llm_time_end - llm_time_start
     extract_json = json.loads(result.choices[0].message.content)
-    print("\nFinal result:")
-    print("Thought: ", extract_json["thought"])
-    print("Action Type: ", extract_json["action"]["action_type"])
-    print("Content: ", extract_json["action"]["content"])
-    print("Desc: ", extract_json["action"]["option_description"])
-
-    seg_index = extract_json["action"]["option_number"]
-    print("Index: ", seg_index)
-    coordinates = masks[seg_index]["point_coords"][0]
-    print("Coordinates: ", coordinates)
-
-    print("Showing selected segment...")
-    draw_selected_segment(seg_index, masks, coordinates)
 
     print("\nProcess completed!")
     print(f"Time taken to crop images: {crop_time_inference:.4f} seconds")
     print(
         f"Time taken to generate captions: {caption_time_inference:.4f} seconds")
     print(f"Time taken to analyze: {llm_time_inference:.8f} seconds")
+
+    seg_index, coordinates = extract_segmentation_info(masks, extract_json)
+    print("Showing selected segment...")
+    draw_selected_segment(seg_index, masks, coordinates)
 
 
 if __name__ == "__main__":
