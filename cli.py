@@ -121,7 +121,10 @@ def generate_captioner(model_name=constant.BLIP_MODEL):
             bnb_4bit_compute_dtype=torch.bfloat16
         )
         model = Blip2ForConditionalGeneration.from_pretrained(
-            model_name, device_map=check_device(), quantization_config=quantization_config, torch_dtype=torch.float16)
+            model_name,
+            device_map=check_device(),
+            quantization_config=quantization_config,
+            torch_dtype=torch.float16)
 
         print("Captioner models loaded")
         return processor, model
@@ -142,12 +145,12 @@ def caption_image(processor, model, output_folder=constant.SEGMENTATION_OUTPUT_P
             image_path = f"{output_folder}/{filename}"
             print(f"Processing file: {image_path}")
             image = Image.open(image_path)
+            print("Image opened ", image.verify())
 
             try:
-                inputs = processor(image, return_tensors="pt",
-                                   prompt="Question: how many cats are there? Answer:").to(
-                    check_device(), torch.float32)
-                generated_ids = model.generate(**inputs, max_new_tokens=10)
+                inputs = processor(image, return_tensors="pt").to(
+                    check_device(), torch.float16)
+                generated_ids = model.generate(**inputs, max_new_tokens=20)
                 generated_text = processor.batch_decode(
                     generated_ids, skip_special_tokens=True)[0].strip()
 
@@ -157,7 +160,6 @@ def caption_image(processor, model, output_folder=constant.SEGMENTATION_OUTPUT_P
                 else:
                     captions.append("EMPTY")
                     print("No caption generated")
-
             except Exception as e:
                 print("Error generating caption")
                 print("Error: ", e)
