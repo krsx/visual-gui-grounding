@@ -67,12 +67,12 @@ class VowAgent:
             return None
 
     @staticmethod
-    def save_cropped_images(cropped_images, output_folder):
+    def save_cropped_images(cropped_images, output_folder, format="jpeg"):
         """Saves cropped images."""
         for idx, image in enumerate(cropped_images):
-            path = os.path.join(output_folder, f"{idx}.jpeg")
+            path = os.path.join(output_folder, f"{idx}.{format}")
             image.save(path)
-            print("Cropped image saved:", idx)
+            print(f"Cropped image saved: {idx}.{format}")
 
     @staticmethod
     def cropped_images(image_path, masks):
@@ -121,7 +121,11 @@ class VowAgent:
                 bnb_4bit_compute_dtype=torch.bfloat16
             )
             self.model = Blip2ForConditionalGeneration.from_pretrained(
-                model_name, device_map=self.device, quantization_config=quantization_config, torch_dtype=torch.float16)
+                model_name,
+                device_map=self.device,
+                quantization_config=quantization_config,
+                torch_dtype=torch.float16
+            )
             print("Captioner models loaded")
         except Exception as e:
             print("[ERROR] loading captioner models:", e)
@@ -140,7 +144,7 @@ class VowAgent:
                         **inputs, max_new_tokens=20)
                     generated_text = self.processor.batch_decode(
                         generated_ids, skip_special_tokens=True)[0].strip()
-                    captions.append(generated_text)
+
                     if generated_text is not None or generated_text != "":
                         captions.append(generated_text)
                         print(f"Caption for {filename}: {generated_text}")
@@ -216,6 +220,15 @@ class VowAgent:
         except Exception as e:
             print("[ERROR] resetting segmentation output folder:", e)
 
+    def reset_captions_output(self):
+        """Resets the captions output file."""
+        try:
+            with open(constant.CAPTIONS_OUTPUT_PATH, 'w') as file:
+                file.write("")
+            print("Captions output file reset")
+        except Exception as e:
+            print("[ERROR] resetting captions output file:", e)
+
     def extract_response(self, response):
         """Extracts the response from the LLM output."""
         try:
@@ -225,9 +238,31 @@ class VowAgent:
             print("[ERROR] extracting response:", e)
             return None
 
-    def run_pipeline(self, image_path, user_goals, prev_actions):
+    @staticmethod
+    def draw_selected_segment(seg_index, masks, coordinates, dot_size=5):
+        original_image = Image.open(constant.TEST_IMAGE_PATH)
+        overlay_image = Image.new('RGBA', original_image.size, (0, 0, 0, 0))
+        overlay_color = (255, 0, 0, 200)
+
+        segmentation_mask_image = Image.fromarray(
+            masks[seg_index]["segmentation"].astype('uint8') * 255)
+        draw = ImageDraw.Draw(overlay_image)
+
+        draw.bitmap((0, 0), segmentation_mask_image, fill=overlay_color)
+
+        x, y = coordinates
+        top_left = (x - dot_size, y - dot_size)
+        bottom_right = (x + dot_size, y + dot_size)
+
+        draw.ellipse([top_left, bottom_right], fill="blue")
+        result_image = Image.alpha_composite(
+            original_image.convert('RGBA'), overlay_image)
+        result_image.show()
+
+    def run_pipeline(self, image_path, user_goals, prev_actions, is_display=False):
         """Runs the complete pipeline."""
         self.reset_segmentation_output()
+        self.reset_captions_output()
 
         gray_image_path = constant.GRAY_IMAGE_PATH
         self.convert_gray_image(image_path, gray_image_path)
@@ -249,14 +284,13 @@ class VowAgent:
             prev_actions,
             constant.CAPTIONS_OUTPUT_PATH,
             image_path)
-        print("Final Response:", response)
 
         result = self.extract_response(response)
-        return result
-
-
-if __name__ == "__main__":
-    agent = VowAgent()
-    result = agent.run_pipeline(
-        image_path=constant.TEST_IMAGE_PATH, user_goals="Create a new project", prev_actions=[])
-    print(result)
+        seg_index = result["action"]["option_number"]
+        result["coordinates"] = masks[seg_index]["point_coords"][0]
+        result = json.dumps(result, indent=4)
+        json_result = json.loads(result)
+        if is_display:
+            self.draw_selected_segment(
+                seg_index, masks, json_result["coordinates"])
+        return json_result
