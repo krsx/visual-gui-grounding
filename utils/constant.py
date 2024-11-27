@@ -10,5 +10,9 @@ SEGMENTATION_OUTPUT_PATH = "output/segmentation"
 CAPTIONS_OUTPUT_PATH = "output/captions/captions.txt"
 TEMP_IMAGE = "output/temp/temp.jpg"
 
-EVAL_IMG_PATH = "data/screenspot_imgs"
-JSON_EVAL_PATH = "data/annotations"
+EVAL_IMG_PATH = "eval/data/screenspot_imgs"
+JSON_EVAL_PATH = "eval/data/annotations"
+TEST_EVAL_PATH = "eval/data/test"
+
+# CONSTANTS
+IMG_FORMAT = "jpeg"

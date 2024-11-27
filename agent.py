@@ -161,7 +161,9 @@ class VowAgent:
         try:
             with open(filename, 'w') as file:
                 for idx, item in enumerate(data_list):
-                    file.write(f"[{idx}] {item}\n")
+                    safe_item = item.encode(
+                        'charmap', errors='replace').decode('charmap')
+                    file.write(f"[{idx}] {safe_item}\n")
             print(f"Data successfully saved to {filename}")
         except Exception as e:
             print(f"[ERROR] saving to {filename}:", e)
@@ -293,4 +295,12 @@ class VowAgent:
         if is_display:
             self.draw_selected_segment(
                 seg_index, masks, json_result["coordinates"])
+        print("Final Result:")
+        print(result)
         return json_result
+
+
+if __name__ == "__main__":
+    agent = VowAgent()
+    agent.run_pipeline(constant.TEST_IMAGE_PATH,
+                       "Click on the Maps", None, is_display=True)
