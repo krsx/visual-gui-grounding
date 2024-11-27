@@ -34,6 +34,7 @@ else:
 tasks_result = []
 result = []
 for task in tasks:
+    logging.info("TASK: " + task)
     dataset = "screenspot_" + task + ".json"
     screenspot_data = json.load(
         open(os.path.join(args.screenspot_test, dataset), 'r'))
@@ -46,7 +47,7 @@ for task in tasks:
     num_wrong_format = 0
 
     for j, item in enumerate(screenspot_data):
-        logging.info("Processing Step: " + str(j))
+        logging.info("PROCESSING STEP: " + str(j))
         num_action += 1
         filename = item["img_filename"]
         img_path = os.path.join(args.screenspot_imgs, filename)
@@ -59,8 +60,8 @@ for task in tasks:
         bbox = item["bbox"]
         bbox = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
         img_size = image.size
-        bbox = [bbox[0] / img_size[0], bbox[1] / img_size[1],
-                bbox[2] / img_size[0], bbox[3] / img_size[1]]
+        bbox = [bbox[0] / img_size[0] - 0.5, bbox[1] / img_size[1] - 0.5,
+                bbox[2] / img_size[0] + 0.5, bbox[3] / img_size[1] + 0.5]
         result = agent.run_pipeline(
             image_path=img_path, user_goals=instruction, prev_actions=None)
         try:
@@ -74,6 +75,8 @@ for task in tasks:
                     else:
                         icon_correct.append(1)
                     logging.info("[MATCH] " + str(corr_action / num_action))
+                    logging.info("Agent result: " + str(click_point))
+                    logging.info("Ground truth: " + str(bbox))
                 else:
                     if item["data_type"] == 'text':
                         text_correct.append(0)
@@ -82,13 +85,17 @@ for task in tasks:
                     logging.info("[UNMATCH] " + str(corr_action / num_action))
                     result.append({"img_path": img_path, "text": instruction, "bbox": bbox,
                                   "pred": click_point, "type": item["data_type"], "source": item["data_source"]})
+                    logging.info("Agent result: " + str(click_point))
+                    logging.info("Ground truth: " + str(bbox))
         except:
             num_wrong_format += 1
             if item["data_type"] == 'text':
                 text_correct.append(0)
             else:
                 icon_correct.append(0)
-            logging.info("Step: " + str(j) + " wrong format!")
+            logging.info("[UNMATCH] Step: " + str(j) + " wrong format!")
+            logging.info("Agent result: " + str(click_point))
+            logging.info("Ground truth: " + str(bbox))
 
     logging.info("Action Acc: " + str(corr_action / num_action))
     logging.info("Total num: " + str(num_action))
