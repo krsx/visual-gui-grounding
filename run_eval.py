@@ -83,10 +83,11 @@ for task in tasks:
                     else:
                         icon_correct.append(0)
                     logging.info("[UNMATCH] " + str(corr_action / num_action))
-                    result.append({"img_path": img_path, "text": instruction, "bbox": bbox,
-                                  "pred": click_point, "type": item["data_type"], "source": item["data_source"]})
                     logging.info("Agent result: " + str(click_point))
                     logging.info("Ground truth: " + str(bbox))
+                    details = str({"img_path": img_path, "text": instruction, "bbox": bbox,
+                                   "pred": click_point, "type": item["data_type"], "source": item["data_source"]})
+                    logging.info("Details: " + details)
         except:
             num_wrong_format += 1
             if item["data_type"] == 'text':
