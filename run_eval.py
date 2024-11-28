@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from agent import VowAgent
 
-log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
+log_filename = "logs/" + datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -60,8 +60,9 @@ for task in tasks:
         bbox = item["bbox"]
         bbox = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
         img_size = image.size
-        bbox = [bbox[0] / img_size[0] - 0.5, bbox[1] / img_size[1] - 0.5,
-                bbox[2] / img_size[0] + 0.5, bbox[3] / img_size[1] + 0.5]
+        padding_error = 0.25
+        bbox = [bbox[0] / img_size[0] - padding_error, bbox[1] / img_size[1] - padding_error,
+                bbox[2] / img_size[0] + padding_error, bbox[3] / img_size[1] + padding_error]
         result = agent.run_pipeline(
             image_path=img_path, user_goals=instruction, prev_actions=None)
         try:

@@ -20,13 +20,22 @@ class VowAgent:
         self.device = self.check_device()
         self.sam_mask = None
         self.processor = None
-        self.model = None
+        self.captioner = None
         self.openai = None
 
     @staticmethod
     def check_device():
         """Checks for GPU or CPU."""
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def init_models(self):
+        """Initializes the SAM, BLIP, OpenAI models."""
+        if self.sam_mask is None:
+            self.init_sam()
+        if self.processor is None or self.captioner is None:
+            self.generate_captioner()
+        if self.openai is None:
+            self.init_openai()
 
     def init_sam(self):
         """Initializes the SAM model."""
@@ -41,6 +50,95 @@ class VowAgent:
             print("SAM models loaded")
         except Exception as e:
             print("[ERROR] initializing SAM model:", e)
+
+    def generate_captioner(self, model_name=constant.BLIP_MODEL):
+        """Initializes the BLIP model."""
+        try:
+            self.processor = AutoProcessor.from_pretrained(model_name)
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16
+            )
+            self.captioner = Blip2ForConditionalGeneration.from_pretrained(
+                model_name,
+                device_map=self.device,
+                quantization_config=quantization_config,
+                torch_dtype=torch.float16
+            )
+            print("Captioner models loaded")
+        except Exception as e:
+            print("[ERROR] loading captioner models:", e)
+
+    def caption_images(self, output_folder):
+        """Generates captions for cropped images."""
+        captions = []
+        for filename in sorted(os.listdir(output_folder), key=lambda x: int(x.split('.')[0])):
+            file_path = os.path.join(output_folder, filename)
+            if os.path.isfile(file_path):
+                try:
+                    image = Image.open(file_path)
+                    inputs = self.processor(
+                        image, return_tensors="pt").to(self.device, torch.float16)
+                    generated_ids = self.captioner.generate(
+                        **inputs, max_new_tokens=20)
+                    generated_text = self.processor.batch_decode(
+                        generated_ids, skip_special_tokens=True)[0].strip()
+
+                    if generated_text is not None or generated_text != "":
+                        captions.append(generated_text)
+                        print(f"Caption for {filename}: {generated_text}")
+                    else:
+                        captions.append("EMPTY")
+                        print(f"Caption for {filename}: EMPTY")
+                except Exception as e:
+                    print(f"[ERROR] generating caption for {filename}:", e)
+        return captions
+
+    def init_openai(self):
+        """Initializes OpenAI."""
+        try:
+            self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            print("OpenAI initialized")
+        except Exception as e:
+            print("[ERROR] initializing OpenAI:", e)
+
+    def execute_llm(self, user_goals, prev_actions, captions_path, image_path):
+        """Executes the LLM for reasoning."""
+        try:
+            user_input = prompt.format_input(
+                user_goals, prev_actions, captions_path)
+            base64_image = prompt.encode_image(image_path)
+            response = self.openai.beta.chat.completions.parse(
+                model=constant.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": prompt.SYSTEM_PROMPT
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": user_input,
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url":  base64_image
+                                },
+                            },
+                        ]
+                        # "content": user_input
+                    }
+                ],
+                response_format=response_model.ThoughtResponse
+            )
+            return response
+        except Exception as e:
+            print("[ERROR] executing LLM:", e)
+            return None
 
     @staticmethod
     def convert_gray_image(image_path, output_path):
@@ -111,50 +209,6 @@ class VowAgent:
         x1, y1, w, h = box
         return [x1, y1, x1 + w, y1 + h]
 
-    def generate_captioner(self, model_name=constant.BLIP_MODEL):
-        """Initializes the BLIP model."""
-        try:
-            self.processor = AutoProcessor.from_pretrained(model_name)
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16
-            )
-            self.model = Blip2ForConditionalGeneration.from_pretrained(
-                model_name,
-                device_map=self.device,
-                quantization_config=quantization_config,
-                torch_dtype=torch.float16
-            )
-            print("Captioner models loaded")
-        except Exception as e:
-            print("[ERROR] loading captioner models:", e)
-
-    def caption_images(self, output_folder):
-        """Generates captions for cropped images."""
-        captions = []
-        for filename in sorted(os.listdir(output_folder), key=lambda x: int(x.split('.')[0])):
-            file_path = os.path.join(output_folder, filename)
-            if os.path.isfile(file_path):
-                try:
-                    image = Image.open(file_path)
-                    inputs = self.processor(
-                        image, return_tensors="pt").to(self.device, torch.float16)
-                    generated_ids = self.model.generate(
-                        **inputs, max_new_tokens=20)
-                    generated_text = self.processor.batch_decode(
-                        generated_ids, skip_special_tokens=True)[0].strip()
-
-                    if generated_text is not None or generated_text != "":
-                        captions.append(generated_text)
-                        print(f"Caption for {filename}: {generated_text}")
-                    else:
-                        captions.append("EMPTY")
-                        print(f"Caption for {filename}: EMPTY")
-                except Exception as e:
-                    print(f"[ERROR] generating caption for {filename}:", e)
-        return captions
-
     @staticmethod
     def save_to_txt(data_list, filename):
         """Saves a list of data to a text file."""
@@ -167,69 +221,6 @@ class VowAgent:
             print(f"Data successfully saved to {filename}")
         except Exception as e:
             print(f"[ERROR] saving to {filename}:", e)
-
-    def init_openai(self):
-        """Initializes OpenAI."""
-        try:
-            self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            print("OpenAI initialized")
-        except Exception as e:
-            print("[ERROR] initializing OpenAI:", e)
-
-    def execute_llm(self, user_goals, prev_actions, captions_path, image_path):
-        """Executes the LLM for reasoning."""
-        try:
-            user_input = prompt.format_input(
-                user_goals, prev_actions, captions_path)
-            base64_image = prompt.encode_image(image_path)
-            response = self.openai.beta.chat.completions.parse(
-                model=constant.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": prompt.SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": user_input,
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url":  base64_image
-                                },
-                            },
-                        ]
-                        # "content": user_input
-                    }
-                ],
-                response_format=response_model.ThoughtResponse
-            )
-            return response
-        except Exception as e:
-            print("[ERROR] executing LLM:", e)
-            return None
-
-    def reset_segmentation_output(self):
-        """Resets the segmentation output folder."""
-        try:
-            shutil.rmtree(constant.SEGMENTATION_OUTPUT_PATH)
-            os.mkdir(constant.SEGMENTATION_OUTPUT_PATH)
-            print("Segmentation output folder reset")
-        except Exception as e:
-            print("[ERROR] resetting segmentation output folder:", e)
-
-    def reset_captions_output(self):
-        """Resets the captions output file."""
-        try:
-            with open(constant.CAPTIONS_OUTPUT_PATH, 'w') as file:
-                file.write("")
-            print("Captions output file reset")
-        except Exception as e:
-            print("[ERROR] resetting captions output file:", e)
 
     def extract_response(self, response):
         """Extracts the response from the LLM output."""
@@ -261,42 +252,59 @@ class VowAgent:
             original_image.convert('RGBA'), overlay_image)
         result_image.show()
 
+    def reset_segmentation_output(self):
+        """Resets the segmentation output folder."""
+        try:
+            shutil.rmtree(constant.SEGMENTATION_OUTPUT_PATH)
+            os.mkdir(constant.SEGMENTATION_OUTPUT_PATH)
+            print("Segmentation output folder reset")
+        except Exception as e:
+            print("[ERROR] resetting segmentation output folder:", e)
+
+    def reset_captions_output(self):
+        """Resets the captions output file."""
+        try:
+            with open(constant.CAPTIONS_OUTPUT_PATH, 'w') as file:
+                file.write("")
+            print("Captions output file reset")
+        except Exception as e:
+            print("[ERROR] resetting captions output file:", e)
+
     def run_pipeline(self, image_path, user_goals, prev_actions, is_display=False):
         """Runs the complete pipeline."""
         self.reset_segmentation_output()
         self.reset_captions_output()
 
+        self.init_models()
+
         gray_image_path = constant.GRAY_IMAGE_PATH
         self.convert_gray_image(image_path, gray_image_path)
 
-        self.init_sam()
         masks = self.generate_mask(gray_image_path, self.sam_mask)
-
         cropped_images = self.cropped_images(gray_image_path, masks)
         self.save_cropped_images(
             cropped_images, constant.SEGMENTATION_OUTPUT_PATH)
 
-        self.generate_captioner()
         captions = self.caption_images(constant.SEGMENTATION_OUTPUT_PATH)
         self.save_to_txt(captions, constant.CAPTIONS_OUTPUT_PATH)
 
-        self.init_openai()
         response = self.execute_llm(
             user_goals,
             prev_actions,
             constant.CAPTIONS_OUTPUT_PATH,
             image_path)
-
         result = self.extract_response(response)
         seg_index = result["action"]["option_number"]
         result["coordinates"] = masks[seg_index]["point_coords"][0]
         result = json.dumps(result, indent=4)
         json_result = json.loads(result)
+
         if is_display:
             self.draw_selected_segment(
                 seg_index, masks, json_result["coordinates"])
         print("Final Result:")
         print(result)
+
         return json_result
 
 
