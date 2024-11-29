@@ -3,7 +3,7 @@ import shutil
 import time
 import cv2
 from openai import OpenAI
-from segment_anything import build_sam, SamAutomaticMaskGenerator
+from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 from transformers import AutoProcessor, Blip2ForConditionalGeneration
 from PIL import Image, ImageDraw
 import torch
@@ -40,12 +40,15 @@ class VowAgent:
     def init_sam(self):
         """Initializes the SAM model."""
         try:
+            sam = sam_model_registry[constant.SAM_TYPE](
+                checkpoint=constant.SAM_MODEL).to(self.device)
             self.sam_mask = SamAutomaticMaskGenerator(
-                model=build_sam(checkpoint=constant.SAM_MODEL).to(self.device),
-                points_per_side=32,
-                pred_iou_thresh=0.92,
-                stability_score_thresh=0.95,
-                box_nms_thresh=0.7,
+                model=sam,
+                points_per_batch=32,
+                # points_per_side=32,
+                # pred_iou_thresh=0.92,
+                # stability_score_thresh=0.95,
+                # box_nms_thresh=0.7,
             )
             print("SAM models loaded")
         except Exception as e:
@@ -295,7 +298,11 @@ class VowAgent:
             image_path)
         result = self.extract_response(response)
         seg_index = result["action"]["option_number"]
-        result["coordinates"] = masks[seg_index]["point_coords"][0]
+        try:
+            result["coordinates"] = masks[seg_index]["point_coords"][0]
+        except Exception as e:
+            print("[ERROR] extracting coordinates:", e)
+            result["coordinates"] = [99, 99]  # Default coordinates for error
         result = json.dumps(result, indent=4)
         json_result = json.loads(result)
 
