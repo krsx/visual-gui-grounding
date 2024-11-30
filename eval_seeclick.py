@@ -1,3 +1,4 @@
+from datetime import datetime
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -24,6 +25,19 @@ parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, required=True)
 parser.add_argument('--max_step', type=int, default=None)
 args = parser.parse_args()
+
+
+log_filename = "logs/seeclick" + args.task + \
+    datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_filename, mode='w')
+    ]
+)
+
 
 qwen_path = constant.SEECLICK_MODEL
 tokenizer = AutoTokenizer.from_pretrained(qwen_path, trust_remote_code=True)
