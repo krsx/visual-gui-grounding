@@ -1,0 +1,14 @@
+sam:
+  type: "vit_h"
+  checkpoint: "model/sam_vit_h_4b8939.pth"
+  points_per_batch: 64
+  pred_iou_thresh: 0.88
+  stability_score_thresh: 0.95
+  box_nms_thresh: 0.7
+
+captioner:
+  type: "BLIP2"
+  checkpoint: "Salesforce/blip2-opt-2.7b"
+
+planner:
+  type: "gpt-4o"

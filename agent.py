@@ -10,6 +10,8 @@ import torch
 import numpy as np
 from dotenv import load_dotenv, find_dotenv
 import json
+import yaml
+
 from transformers import BitsAndBytesConfig
 from utils import constant, prompt, response_model
 
@@ -18,6 +20,7 @@ class VowAgent:
     def __init__(self):
         load_dotenv(find_dotenv())
         self.device = self.check_device()
+        self.config = None
         self.sam_mask = None
         self.processor = None
         self.captioner = None
@@ -27,6 +30,15 @@ class VowAgent:
     def check_device():
         """Checks for GPU or CPU."""
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def load_config(self, config_path):
+        """Loads the configuration file."""
+        try:
+            with open(config_path, 'r') as file:
+                self.config = yaml.safe_load(file)
+            print("Configuration loaded")
+        except Exception as e:
+            print("[ERROR] loading configuration file:", e)
 
     def init_models(self):
         """Initializes the SAM, BLIP, OpenAI models."""
@@ -40,31 +52,31 @@ class VowAgent:
     def init_sam(self):
         """Initializes the SAM model."""
         try:
-            sam = sam_model_registry[constant.SAM_TYPE](
-                checkpoint=constant.SAM_MODEL).to(self.device)
+            sam = sam_model_registry[self.config["sam"]["type"]](
+                checkpoint=self.config["sam"]["checkpoint"]).to(self.device)
             self.sam_mask = SamAutomaticMaskGenerator(
                 model=sam,
-                points_per_batch=32,
-                # points_per_side=32,
-                # pred_iou_thresh=0.92,
-                # stability_score_thresh=0.95,
-                # box_nms_thresh=0.7,
+                points_per_batch=self.config["sam"]["points_per_batch"],
+                pred_iou_thresh=self.config["sam"]["pred_iou_thresh"],
+                stability_score_thresh=self.config["sam"]["stability_score_thresh"],
+                box_nms_thresh=self.config["sam"]["box_nms_thresh"],
             )
             print("SAM models loaded")
         except Exception as e:
             print("[ERROR] initializing SAM model:", e)
 
-    def generate_captioner(self, model_name=constant.BLIP_MODEL):
+    def generate_captioner(self):
         """Initializes the BLIP model."""
         try:
-            self.processor = AutoProcessor.from_pretrained(model_name)
+            self.processor = AutoProcessor.from_pretrained(
+                self.config["captioner"]["checkpoint"])
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16
             )
             self.captioner = Blip2ForConditionalGeneration.from_pretrained(
-                model_name,
+                self.config["captioner"]["checkpoint"],
                 device_map=self.device,
                 quantization_config=quantization_config,
                 torch_dtype=torch.float16
@@ -113,7 +125,7 @@ class VowAgent:
                 user_goals, prev_actions, captions_path)
             base64_image = prompt.encode_image(image_path)
             response = self.openai.beta.chat.completions.parse(
-                model=constant.OPENAI_MODEL,
+                model=self.config["planner"]["type"],
                 messages=[
                     {
                         "role": "system",

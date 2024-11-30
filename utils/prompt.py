@@ -32,12 +32,8 @@ Action: {One Action format you choose}
 """
 
 
-# BLIP_PROMPT = """
-# Question: Based on this image, is this a TEXT, IMAGE, BUTTON, ICON, or OTHER? Only answer based on the given options.
-# """
-
-EVAL_PROMPT = """
-
+BLIP_PROMPT = """
+Describe this image in 1 sentence
 """
 
 

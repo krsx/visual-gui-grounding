@@ -5,8 +5,10 @@ from datetime import datetime
 import os
 from PIL import Image
 from tqdm import tqdm
+import yaml
 
 from agent import VowAgent
+from utils import constant
 
 log_filename = "logs/" + datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 logging.basicConfig(
@@ -24,10 +26,15 @@ parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, default="all", required=True)
 parser.add_argument('--max_step', type=int, default=None)
+parser.add_argument('--config', type=str, default=None)
 args = parser.parse_args()
 
 
 agent = VowAgent()
+if args.config is None:
+    agent.load_config(constant.CONFIG_PATH)
+else:
+    agent.load_config(args.config)
 if args.task == "all":
     tasks = ["mobile", "desktop", "web"]
 else:

@@ -9,8 +9,11 @@ BLIP_MODEL = "Salesforce/blip2-opt-2.7b"
 OPENAI_MODEL = "gpt-4o"
 
 # PATHS
+CONFIG_PATH = "configs/base.yaml"
+
 TEST_IMAGE_PATH = "test.jpeg"
 GRAY_IMAGE_PATH = "gray.jpeg"
+
 SEGMENTATION_OUTPUT_PATH = "output/segmentation"
 CAPTIONS_OUTPUT_PATH = "output/captions/captions.txt"
 TEMP_IMAGE = "output/temp/temp.jpg"
