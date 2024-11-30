@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, default="all", required=True)
+parser.add_argument('--max_step', type=int, default=None)
 args = parser.parse_args()
 
 
@@ -47,6 +48,8 @@ for task in tasks:
     num_wrong_format = 0
 
     for j, item in enumerate(screenspot_data):
+        if args.max_step is not None and j >= args.max_step:
+            break
         logging.info("PROCESSING STEP: " + str(j))
         num_action += 1
         filename = item["img_filename"]

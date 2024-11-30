@@ -1,5 +1,10 @@
 # MODELS
+SAM_TYPE = "vit_h"
 SAM_MODEL = "model/sam_vit_h_4b8939.pth"
+
+# SAM_TYPE = "vit_b"
+# SAM_MODEL = "model/sam_vit_b_01ec64.pth"
+
 BLIP_MODEL = "Salesforce/blip2-opt-2.7b"
 OPENAI_MODEL = "gpt-4o"
 
@@ -12,7 +17,6 @@ TEMP_IMAGE = "output/temp/temp.jpg"
 
 EVAL_IMG_PATH = "eval/data/screenspot_imgs"
 JSON_EVAL_PATH = "eval/data/annotations"
-TEST_EVAL_PATH = "eval/data/test"
 
 # CONSTANTS
 IMG_FORMAT = "jpeg"

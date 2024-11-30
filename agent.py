@@ -168,7 +168,7 @@ class VowAgent:
             return None
 
     @staticmethod
-    def save_cropped_images(cropped_images, output_folder, format="jpeg"):
+    def save_cropped_images(cropped_images, output_folder, format=constant.IMG_FORMAT):
         """Saves cropped images."""
         for idx, image in enumerate(cropped_images):
             path = os.path.join(output_folder, f"{idx}.{format}")
