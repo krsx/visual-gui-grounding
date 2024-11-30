@@ -8,6 +8,8 @@ SAM_MODEL = "model/sam_vit_h_4b8939.pth"
 BLIP_MODEL = "Salesforce/blip2-opt-2.7b"
 OPENAI_MODEL = "gpt-4o"
 
+SEECLICK_MODEL = "cckevinn/SeeClick"
+
 # PATHS
 CONFIG_PATH = "configs/base.yaml"
 
