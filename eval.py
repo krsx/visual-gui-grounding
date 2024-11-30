@@ -10,6 +10,7 @@ import yaml
 from agent import VowAgent
 from utils import constant
 
+
 log_filename = "logs/" + datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 logging.basicConfig(
     level=logging.INFO,

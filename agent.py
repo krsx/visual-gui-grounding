@@ -17,6 +17,10 @@ from utils import constant, prompt, response_model
 
 
 class VowAgent:
+    # for reproducibility in evaluations
+    # remove this line for normal usage
+    torch.manual_seed(1234)
+
     def __init__(self):
         load_dotenv(find_dotenv())
         self.device = self.check_device()
