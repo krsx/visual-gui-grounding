@@ -11,6 +11,12 @@ from agent import VowAgent
 from utils import constant
 
 
+folder_name = "logs/vowagent/"
+if not os.path.exists(folder_name):
+    os.makedirs(folder_name)
+    print(f"Folder '{folder_name}' created successfully!")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
@@ -20,7 +26,7 @@ parser.add_argument('--config', type=str, default=None)
 args = parser.parse_args()
 
 
-log_filename = "logs/vowagent/" + args.task + \
+log_filename = folder_name + args.task + \
     datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
 logging.basicConfig(
     level=logging.INFO,

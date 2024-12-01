@@ -16,11 +16,18 @@ from utils import constant
 
 torch.manual_seed(1234)
 
+folder_name = "logs/seeclick/"
+if not os.path.exists(folder_name):
+    os.makedirs(folder_name)
+    print(f"Folder '{folder_name}' created successfully!")
+
+
 parser = argparse.ArgumentParser()
 # parser.add_argument('--qwen_path', type=str, required=True)
 parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, required=True)
+parser.add_argument('--model', type=str, default=None)
 parser.add_argument('--max_step', type=int, default=None)
 args = parser.parse_args()
 
@@ -39,8 +46,14 @@ logging.basicConfig(
 tokenizer = AutoTokenizer.from_pretrained(
     constant.QWEN_MODEL, trust_remote_code=True)
 
-model = AutoModelForCausalLM.from_pretrained(
-    constant.SEECLICK_MODEL, device_map="cuda", trust_remote_code=True, bf16=True).eval()
+if args.model is not None and args.model == "qwen":
+    model = AutoModelForCausalLM.from_pretrained(
+        constant.QWEN_MODEL, device_map="cuda", trust_remote_code=True, bf16=True).eval()
+    logging.info("TESTING QWEN-VL MODEL")
+else:
+    model = AutoModelForCausalLM.from_pretrained(
+        constant.SEECLICK_MODEL, device_map="cuda", trust_remote_code=True, bf16=True).eval()
+    logging.info("TESTING SEECLICK MODEL")
 
 print("Load Success")
 model.generation_config = GenerationConfig.from_pretrained(
@@ -116,6 +129,7 @@ for task in tasks:
                 logging.info("Ground truth: " + str(bbox))
             result.append({"img_path": img_path, "text": instruction, "bbox": bbox, "pred": click_point,
                            "type": item["data_type"], "source": item["data_source"]})
+            logging.info("DETAILS: " + str(result[-1]))
         except:
             num_wrong_format += 1
             if item["data_type"] == 'text':
