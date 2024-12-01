@@ -20,7 +20,7 @@ parser.add_argument('--config', type=str, default=None)
 args = parser.parse_args()
 
 
-log_filename = "logs/vowagent" + args.task + \
+log_filename = "logs/vowagent/" + args.task + \
     datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
 logging.basicConfig(
     level=logging.INFO,

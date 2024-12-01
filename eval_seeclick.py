@@ -14,12 +14,10 @@ from tqdm import tqdm
 from utils.process_utils import pred_2_point, extract_bbox
 from utils import constant
 
-logging.basicConfig(level=logging.INFO)
 torch.manual_seed(1234)
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--qwen_path', type=str, required=True)
-parser.add_argument('--lora_path', type=str, required=True)
 parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, required=True)
@@ -27,7 +25,7 @@ parser.add_argument('--max_step', type=int, default=None)
 args = parser.parse_args()
 
 
-log_filename = "logs/seeclick" + args.task + \
+log_filename = "logs/seeclick/" + args.task + \
     datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
 logging.basicConfig(
     level=logging.INFO,
@@ -38,24 +36,15 @@ logging.basicConfig(
     ]
 )
 
+tokenizer = AutoTokenizer.from_pretrained(
+    constant.QWEN_MODEL, trust_remote_code=True)
 
-qwen_path = constant.SEECLICK_MODEL
-tokenizer = AutoTokenizer.from_pretrained(qwen_path, trust_remote_code=True)
-
-if args.lora_path != 'Qwen-VL-Chat':
-    # use lora
-    lora_path = args.lora_path
-    model = AutoPeftModelForCausalLM.from_pretrained(
-        lora_path, device_map="cuda", trust_remote_code=True, bf16=True).eval()
-else:
-    # use Qwen-VL-Chat
-    model_path = qwen_path
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path, device_map="cuda", trust_remote_code=True, bf16=True).eval()
+model = AutoModelForCausalLM.from_pretrained(
+    constant.SEECLICK_MODEL, device_map="cuda", trust_remote_code=True, bf16=True).eval()
 
 print("Load Success")
 model.generation_config = GenerationConfig.from_pretrained(
-    qwen_path, trust_remote_code=True)
+    constant.QWEN_MODEL, trust_remote_code=True)
 
 if args.task == "all":
     tasks = ["mobile", "desktop", "web"]
@@ -64,6 +53,7 @@ else:
 tasks_result = []
 result = []
 for task in tasks:
+    logging.info("TASK: " + task)
     dataset = "screenspot_" + task + ".json"
     screenspot_data = json.load(
         open(os.path.join(args.screenspot_test, dataset), 'r'))
@@ -75,15 +65,16 @@ for task in tasks:
     text_correct = []
     icon_correct = []
     num_wrong_format = 0
-    for j, item in tqdm(enumerate(screenspot_data)):
+    for j, item in enumerate(screenspot_data):
         if args.max_step is not None and j >= args.max_step:
             break
-
+        logging.info("PROCESSING STEP: " + str(j))
         num_action += 1
         filename = item["img_filename"]
         img_path = os.path.join(args.screenspot_imgs, filename)
         if not os.path.exists(img_path):
-            print("img not found")
+            print("[ERROR] Image not found: ", img_path)
+            print("[ERROR] Please input the correct path of the image")
             input()
         image = Image.open(img_path)
         instruction = item["instruction"]
@@ -114,13 +105,15 @@ for task in tasks:
                     text_correct.append(1)
                 else:
                     icon_correct.append(1)
-                logging.info("match " + str(corr_action / num_action))
+                logging.info("[MATCH] " + str(corr_action / num_action))
             else:
                 if item["data_type"] == 'text':
                     text_correct.append(0)
                 else:
                     icon_correct.append(0)
-                logging.info("unmatch " + str(corr_action / num_action))
+                logging.info("[UNMATCH] " + str(corr_action / num_action))
+                logging.info("Agent result: " + str(click_point))
+                logging.info("Ground truth: " + str(bbox))
             result.append({"img_path": img_path, "text": instruction, "bbox": bbox, "pred": click_point,
                            "type": item["data_type"], "source": item["data_source"]})
         except:
@@ -129,7 +122,9 @@ for task in tasks:
                 text_correct.append(0)
             else:
                 icon_correct.append(0)
-            logging.info("Step: " + str(j) + " wrong format")
+            logging.info("[UNMATCH] Step: " + str(j) + " wrong format!")
+            logging.info("Agent result: " + str(click_point))
+            logging.info("Ground truth: " + str(bbox))
 
     logging.info("Action Acc: " + str(corr_action / num_action))
     logging.info("Total num: " + str(num_action))

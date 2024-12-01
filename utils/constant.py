@@ -9,6 +9,7 @@ BLIP_MODEL = "Salesforce/blip2-opt-2.7b"
 OPENAI_MODEL = "gpt-4o"
 
 SEECLICK_MODEL = "cckevinn/SeeClick"
+QWEN_MODEL = "Qwen/Qwen-VL-Chat"
 
 # PATHS
 CONFIG_PATH = "configs/base.yaml"
