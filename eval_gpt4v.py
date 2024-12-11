@@ -1,7 +1,6 @@
 import argparse
 from datetime import datetime
 import logging
-from tqdm import tqdm
 import ast
 from PIL import Image
 import os
@@ -26,12 +25,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--screenspot_imgs', type=str, required=True)
 parser.add_argument('--screenspot_test', type=str, required=True)
 parser.add_argument('--task', type=str, required=True)
+parser.add_argument('--model', type=str, default=None)
 parser.add_argument('--max_step', type=int, default=None)
 args = parser.parse_args()
 
 
 log_filename = folder_name + args.task + \
-    datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
+    datetime.now().strftime("_%Y%m%d-%H%M%S") + ".log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -40,9 +40,16 @@ logging.basicConfig(
         logging.FileHandler(log_filename, mode='w')
     ]
 )
+logging.info("EVAL DETAILS:\n" + str(args))
 
 
 def execute_llm(api_key, item, img_filename, img_path, instruction):
+    model = None
+    if args.model is not None and args.model == "mini":
+        model = "gpt-4o-mini"
+    else:
+        model = "gpt-4o"
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -55,7 +62,7 @@ def execute_llm(api_key, item, img_filename, img_path, instruction):
                    "data_type": item["data_type"], "data_souce": item["data_source"], "prompt": prompt, "correct": False}
 
     payload = {
-        "model": "gpt-4o-mini",
+        "model": model,
         "messages": [
             {
                 "role": "user",
@@ -181,46 +188,3 @@ for task in tasks:
     tasks_result.append([text_acc, icon_acc])
 
 logging.info(tasks_result)
-
-
-# screenspot_imgs_dir = './data/screenspot_imgs'
-# test_data = json.load(open('./data/screenspot_mobile.json', 'r'))
-# result = []
-# num_correct = 0
-
-
-# for item in tqdm(test_data[:]):
-
-#     img_filename = item["img_filename"]
-#     img_path = os.path.join(screenspot_imgs_dir, img_filename)
-#     image = Image.open(img_path)
-#     img_size = image.size
-#     bbox = item["bbox"]
-#     bbox = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
-#     bbox = [bbox[0] / img_size[0], bbox[1] / img_size[1],
-#             bbox[2] / img_size[0], bbox[3] / img_size[1]]
-
-#     instruction = item["instruction"]
-
-#     result_item, response = execute_llm(api_key, item, img_filename, img_path, instruction)
-
-#     try:
-#         pred = ast.literal_eval(
-#             response.json()['choices'][0]['message']['content'])
-
-#         click_point = [(pred[0] + pred[2]) / 2, (pred[1] + pred[3]) / 2]
-
-#         if (bbox[0] <= click_point[0] <= bbox[2]) and (bbox[1] <= click_point[1] <= bbox[3]):
-#             num_correct += 1
-#             result_item["correct"] = True
-#             print("correct")
-#         else:
-#             print("incorrect")
-#     except:
-#         print("wrong format")
-
-#     result.append(result_item)
-
-#     json.dump(result, open('./gpt4v_result_mobile.json', 'w'))
-
-# print("Success rate: "+str(num_correct/len(test_data)))
