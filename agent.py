@@ -18,7 +18,6 @@ from utils import constant, prompt, response_model
 
 class VowAgent:
     # for reproducibility in evaluations
-    # remove this line for normal usage
     torch.manual_seed(1234)
 
     def __init__(self):
@@ -333,5 +332,10 @@ class VowAgent:
 
 if __name__ == "__main__":
     agent = VowAgent()
-    agent.run_pipeline(constant.TEST_IMAGE_PATH,
-                       "Click on the Maps", None, is_display=True)
+    agent.load_config(constant.CONFIG_PATH)
+    agent.run_pipeline(
+        image_path=constant.TEST_IMAGE_PATH,
+        user_goals="Click on the Maps",
+        prev_actions=None,
+        is_display=True
+    )
